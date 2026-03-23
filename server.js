@@ -30,17 +30,13 @@ app.post("/api/guess-street", async (req, res) => {
       });
     }
 
-    const heardNorm = norm(street_heard);
-    const cityNorm = norm(city_name);
-    const postalNorm = String(postal_code).trim();
-
-    const query = `${street_heard} ${postal_code} ${city_name} Germany`;
+    const query = `${street_heard}, ${postal_code} ${city_name}, Germany`;
 
     const url =
-      `https://autocomplete.search.hereapi.com/v1/autocomplete` +
+      `https://geocode.search.hereapi.com/v1/geocode` +
       `?q=${encodeURIComponent(query)}` +
       `&in=countryCode:DEU` +
-      `&limit=8` +
+      `&limit=5` +
       `&apiKey=${encodeURIComponent(apiKey)}`;
 
     const response = await fetch(url);
@@ -48,30 +44,32 @@ app.post("/api/guess-street", async (req, res) => {
 
     const items = Array.isArray(data.items) ? data.items : [];
 
+    const heardNorm = norm(street_heard);
+    const cityNorm = norm(city_name);
+    const postalNorm = String(postal_code).trim();
+
     const scored = items.map((item) => {
       const address = item.address || {};
 
-      const streetCandidate =
+      const street =
         address.street ||
         item.title ||
         address.label ||
         "";
 
-      const postalCandidate = address.postalCode || "";
-      const cityCandidate =
+      const postal = address.postalCode || "";
+      const city =
         address.city ||
         address.district ||
         address.county ||
         address.state ||
         "";
 
-      const streetNorm = norm(streetCandidate);
-      const cityCandidateNorm = norm(cityCandidate);
-
       let score = 0;
 
-      if (postalCandidate === postalNorm) score += 4;
+      if (postal === postalNorm) score += 4;
 
+      const cityCandidateNorm = norm(city);
       if (
         cityCandidateNorm.includes(cityNorm) ||
         cityNorm.includes(cityCandidateNorm)
@@ -79,13 +77,13 @@ app.post("/api/guess-street", async (req, res) => {
         score += 3;
       }
 
+      const streetNorm = norm(street);
       if (streetNorm.includes(heardNorm)) score += 4;
 
       return {
-        raw: item,
-        street: streetCandidate,
-        postal: postalCandidate,
-        city: cityCandidate,
+        street,
+        postal,
+        city,
         score
       };
     }).sort((a, b) => b.score - a.score);
