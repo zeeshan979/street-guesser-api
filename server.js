@@ -81,6 +81,7 @@ app.post("/api/guess-street", async (req, res) => {
       if (streetNorm.includes(heardNorm)) score += 4;
 
       return {
+        title: item.title || "",
         street,
         postal,
         city,
@@ -89,31 +90,26 @@ app.post("/api/guess-street", async (req, res) => {
     }).sort((a, b) => b.score - a.score);
 
     const suggestions = scored
-      .map((x) => x.street)
+      .map((x) => x.street || x.title)
       .filter(Boolean)
       .filter((value, index, arr) => arr.indexOf(value) === index)
-      .slice(0, 3);
+      .slice(0, 5);
 
     const best = scored[0];
 
-    if (!best || !best.street || best.score < 4) {
-      return res.json({
-        matched: false,
-        best_street: null,
-        confidence: 0,
-        suggestions
-      });
-    }
-
     return res.json({
-      matched: true,
-      best_street: best.street,
-      confidence: best.score >= 8 ? 0.95 : 0.75,
-      suggestions
+      matched: !!(best && best.score >= 4),
+      best_street: best && best.score >= 4 ? best.street : null,
+      confidence: best ? best.score : 0,
+      suggestions,
+      debug_query: query,
+      debug_count: items.length,
+      debug_items: scored.slice(0, 5)
     });
   } catch (error) {
     return res.status(500).json({
-      error: "internal_error"
+      error: "internal_error",
+      details: String(error)
     });
   }
 });
