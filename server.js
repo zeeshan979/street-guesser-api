@@ -30,23 +30,24 @@ app.post("/api/guess-street", async (req, res) => {
       });
     }
 
+    const heardNorm = norm(street_heard);
+    const cityNorm = norm(city_name);
+    const postalNorm = String(postal_code).trim();
+
     const query = `${street_heard}, ${postal_code} ${city_name}, Germany`;
 
     const url =
-      `https://geocode.search.hereapi.com/v1/geocode` +
+      `https://autosuggest.search.hereapi.com/v1/autosuggest` +
       `?q=${encodeURIComponent(query)}` +
       `&in=countryCode:DEU` +
-      `&limit=5` +
+      `&limit=8` +
+      `&lang=de-DE` +
       `&apiKey=${encodeURIComponent(apiKey)}`;
 
     const response = await fetch(url);
     const data = await response.json();
 
     const items = Array.isArray(data.items) ? data.items : [];
-
-    const heardNorm = norm(street_heard);
-    const cityNorm = norm(city_name);
-    const postalNorm = String(postal_code).trim();
 
     const scored = items.map((item) => {
       const address = item.address || {};
@@ -65,11 +66,13 @@ app.post("/api/guess-street", async (req, res) => {
         address.state ||
         "";
 
+      const streetNorm = norm(street);
+      const cityCandidateNorm = norm(city);
+
       let score = 0;
 
       if (postal === postalNorm) score += 4;
 
-      const cityCandidateNorm = norm(city);
       if (
         cityCandidateNorm.includes(cityNorm) ||
         cityNorm.includes(cityCandidateNorm)
@@ -77,7 +80,6 @@ app.post("/api/guess-street", async (req, res) => {
         score += 3;
       }
 
-      const streetNorm = norm(street);
       if (streetNorm.includes(heardNorm)) score += 4;
 
       return {
