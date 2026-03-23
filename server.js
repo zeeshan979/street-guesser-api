@@ -3,6 +3,16 @@ import express from "express";
 const app = express();
 app.use(express.json());
 
+function norm(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .trim();
+}
+
 app.post("/api/guess-street", async (req, res) => {
   try {
     const { postal_code, city_name, street_heard } = req.body || {};
@@ -20,13 +30,17 @@ app.post("/api/guess-street", async (req, res) => {
       });
     }
 
-    const query = `${street_heard}, ${postal_code} ${city_name}, Germany`;
+    const heardNorm = norm(street_heard);
+    const cityNorm = norm(city_name);
+    const postalNorm = String(postal_code).trim();
+
+    const query = `${street_heard} ${postal_code} ${city_name} Germany`;
 
     const url =
       `https://autocomplete.search.hereapi.com/v1/autocomplete` +
       `?q=${encodeURIComponent(query)}` +
       `&in=countryCode:DEU` +
-      `&limit=5` +
+      `&limit=8` +
       `&apiKey=${encodeURIComponent(apiKey)}`;
 
     const response = await fetch(url);
@@ -36,27 +50,42 @@ app.post("/api/guess-street", async (req, res) => {
 
     const scored = items.map((item) => {
       const address = item.address || {};
-      const street = address.street || item.title || "";
-      const postal = address.postalCode || "";
-      const city =
-        address.city || address.district || address.county || "";
+
+      const streetCandidate =
+        address.street ||
+        item.title ||
+        address.label ||
+        "";
+
+      const postalCandidate = address.postalCode || "";
+      const cityCandidate =
+        address.city ||
+        address.district ||
+        address.county ||
+        address.state ||
+        "";
+
+      const streetNorm = norm(streetCandidate);
+      const cityCandidateNorm = norm(cityCandidate);
 
       let score = 0;
 
-      if (postal === postal_code) score += 5;
+      if (postalCandidate === postalNorm) score += 4;
 
-      const cityA = String(city).toLowerCase();
-      const cityB = String(city_name).toLowerCase();
-      if (cityA.includes(cityB) || cityB.includes(cityA)) score += 5;
+      if (
+        cityCandidateNorm.includes(cityNorm) ||
+        cityNorm.includes(cityCandidateNorm)
+      ) {
+        score += 3;
+      }
 
-      const heard = String(street_heard).toLowerCase();
-      const streetLc = String(street).toLowerCase();
-      if (streetLc.includes(heard)) score += 3;
+      if (streetNorm.includes(heardNorm)) score += 4;
 
       return {
-        street,
-        postal,
-        city,
+        raw: item,
+        street: streetCandidate,
+        postal: postalCandidate,
+        city: cityCandidate,
         score
       };
     }).sort((a, b) => b.score - a.score);
@@ -64,16 +93,17 @@ app.post("/api/guess-street", async (req, res) => {
     const suggestions = scored
       .map((x) => x.street)
       .filter(Boolean)
+      .filter((value, index, arr) => arr.indexOf(value) === index)
       .slice(0, 3);
 
     const best = scored[0];
 
-    if (!best || !best.street) {
+    if (!best || !best.street || best.score < 4) {
       return res.json({
         matched: false,
         best_street: null,
         confidence: 0,
-        suggestions: []
+        suggestions
       });
     }
 
