@@ -142,9 +142,6 @@ app.post("/api/guess-street", async (req, res) => {
       best_street: bestStreet,
       confidence,
       suggestions,
-      debug_query: qq,
-      debug_count: rawItems.length,
-      debug_items: topItems,
     });
   } catch (error) {
     return res.status(500).json({
